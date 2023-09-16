@@ -1,0 +1,81 @@
+name: Build and Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      caddy_version:
+        description: 'Caddy version ref such as tag, branch or commit'
+        required: true
+        type: string
+        default: 'latest'
+
+      release_name:
+        description: 'Name of Github release'
+        required: true
+        type: string
+
+      release_tag:
+        description: 'Tag of Github release'
+        required: true
+        type: string
+
+jobs:
+  build_and_release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.21.1 # You can adjust the Go version as needed
+
+      - name: Install xcaddy
+        run: go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
+
+      - name: Build Caddy amd64
+        run: |
+          LATEST_RELEASE=${{ inputs.caddy_version }}
+          GOARCH=amd64 xcaddy build $LATEST_RELEASE \
+            --with github.com/caddy-dns/cloudflare \
+            --with github.com/mholt/caddy-l4/layer4 \
+            --with github.com/mholt/caddy-l4/modules/l4proxy \
+            --with github.com/mholt/caddy-l4/modules/l4tls \
+            --with github.com/mholt/caddy-l4/layer4 \
+            --with github.com/greenpau/caddy-security \
+            --with github.com/greenpau/caddy-trace \
+            --output caddy-amd64
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Caddy arm64
+        run: |
+          LATEST_RELEASE=${{ inputs.caddy_version }}
+          GOARCH=arm64 xcaddy build $LATEST_RELEASE \
+            --with github.com/caddy-dns/cloudflare \
+            --with github.com/mholt/caddy-l4/layer4 \
+            --with github.com/mholt/caddy-l4/modules/l4proxy \
+            --with github.com/mholt/caddy-l4/modules/l4tls \
+            --with github.com/mholt/caddy-l4/layer4 \
+            --with github.com/greenpau/caddy-security \
+            --with github.com/greenpau/caddy-trace \
+            --output caddy-arm64
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create release and upload
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: ${{ inputs.release_name }}
+          tag_name: ${{ inputs.release_tag }}
+          draft: false
+          prerelease: false
+          files: |
+            caddy-amd64
+            caddy-arm64
+
+permissions:
+  contents: write
